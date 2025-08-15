@@ -163,29 +163,3 @@ workflow.add_edge("answer_user_messages", END)
 checkpointer = MemorySaver()
 # Compile the graph with checkpointer
 app = workflow.compile(checkpointer=checkpointer)
-
-config = {"configurable": {"thread_id": "1"}}
-node_to_stream = 'answer_user_messages'
-
-async def chat_loop():
-    while True:
-        user_input = input("\nYou: ")
-        if user_input.lower().strip() in {"exit", "quit"}:
-            print("Exiting chat...")
-            break
-
-        input_message = HumanMessage(content=user_input)
-
-        print("AI: ", end="", flush=True)
-
-        async for event in app.astream_events({"messages": [input_message]}, config, version="v2"):
-            if event["event"] == "on_chat_model_stream" and event['metadata'].get('langgraph_node', '') == node_to_stream:
-                data = event["data"]
-                print(data["chunk"].content, end="", flush=True)
-        print()  # newline after full response
-
-async def main():
-    await chat_loop()
-
-if __name__ == "__main__":
-    asyncio.run(main())
