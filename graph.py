@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import json
+from functools import lru_cache
 import asyncio
 from dotenv import load_dotenv
 from fuzzywuzzy import process
@@ -21,9 +22,11 @@ from typing import TypedDict, Literal, Optional, Dict, Union
 
 from chat_template import (
     prompt_extract_symbol,
+    prompt_answer_messages_wo_news,
     prompt_answer_messages,
     prompt_route_all,
-    prompt_handle_other
+    prompt_handle_other,
+    prompt_news_relevance
 )
 
 # Always resolve relative to this file's directory
@@ -49,9 +52,11 @@ company_names = df["NAME OF COMPANY"].tolist()
 
 class GraphState(MessagesState):
     non_stock: bool = False            # True if query is not stock related
-    follow_up: Optional[bool] = None   # None until determined; then True/False
+    follow_up: Optional[bool] = False   # None until determined; then True/False
     symbol: Optional[str] = None       # Stock symbol, e.g., 'HDFCBANK'
     stock_info: Optional[Dict] = None  # Populated after fetching stock data
+    news_required: bool = False
+    news_data: Optional[str] = None
     response: Optional[str] = None     # Model's textual reply
 
 def classify_query(state: GraphState) -> dict:
@@ -67,6 +72,9 @@ def classify_query(state: GraphState) -> dict:
             return {
                 "follow_up": False,
                 "non_stock": False,
+                "news_required": False,
+                "news_data": None,
+                "stock_info": None,
                 "messages": [RemoveMessage(id=m.id) for m in state["messages"][:-1]]
             }
         return {"follow_up": False, "non_stock": False}
@@ -78,6 +86,13 @@ def classify_query(state: GraphState) -> dict:
             "messages": [RemoveMessage(id=m.id) for m in state["messages"][:-1]]
         }
 
+def news_required(state: GraphState) -> dict:
+    chain = prompt_news_relevance | llmg
+    result = chain.invoke({"messages": state["messages"]}).content.strip()
+    if result == "relevant":
+        return {"news_required": True}
+    else:
+        return {"news_required": False}
 
 # Node to extract company symbol for single stock queries
 def extract_symbol(state: GraphState) -> dict:
@@ -93,25 +108,68 @@ def extract_symbol(state: GraphState) -> dict:
     
     return {"symbol": symbol}
 
-# Node to fetch stock data
-def get_stock_info(state: GraphState) -> dict:
-    if state["symbol"] == "NO_MATCH":
-        return {"stock_info": {"data": "No data available"}}  # Response already set in extract_symbol
+# Cache important keys CSV so it’s loaded only once
+@lru_cache(maxsize=1)
+def load_keys_to_keep(csv_path="./important_keys.csv"):
     try:
-        stock_symbol = state["symbol"]
-        stock = yf.Ticker(f"{stock_symbol}.NS")
-        info = stock.info
-        # Read the CSV that contains the keys to keep
-        imp_keys__path = "./important_keys.csv"
-        keys_df = pd.read_csv(imp_keys__path, header=None)
-        keys_to_keep = set(keys_df.iloc[0].dropna().tolist())
-        # Filter dictionary
-        filtered_info = {k: v for k, v in info.items() if k in keys_to_keep}
-    except Exception as e:
-        filtered_info = {"data": "No data available"}
-    return {"stock_info": filtered_info}
+        keys_df = pd.read_csv(csv_path, header=None)
+        return set(keys_df.iloc[0].dropna().tolist())
+    except Exception:
+        return set()
 
-def route_query(state: GraphState) -> Literal["follow_up", "new", "other"]:
+# function to get news data
+def get_stock_news_info(stock) -> str:
+    news_string = ""    
+    try:
+        news = stock.get_news(count=5)
+        for article in news:
+            news_string += f"Publication Date: {article['content']['pubDate'][:10]}\nsummary:  {article['content']['summary']}\n"
+    except Exception as e:
+        print(f"error getting news: {e}")
+    return news_string
+
+def get_stock_info(state: GraphState) -> GraphState:
+    """
+    Fetch stock information and optionally recent news for the given symbol.
+    Returns a dictionary with 'stock_info' and 'news_data'.
+    """
+
+    # Handle missing/invalid symbol
+    if state.get("symbol") == "NO_MATCH":
+        return {"stock_info": {"data": "No data available"}, "news_data": []}
+
+    stock_symbol = state["symbol"]
+    try:
+        stock = yf.Ticker(f"{stock_symbol}.NS")
+    except Exception:
+        return {"stock_info": {"data": "No data available"}, "news_data": []}
+
+    result = {"news_data": state.get("news_data", [])}
+
+    # Handle follow-up queries
+    if state.get("follow_up", False):
+        if state.get("news_required", False) and not result["news_data"]:
+            result["news_data"] = get_stock_news_info(stock)
+        return result
+
+    # Handle new queries → fetch structured stock info
+    try:
+        keys_to_keep = load_keys_to_keep()
+        info = stock.info
+        filtered_info = {k: v for k, v in info.items() if k in keys_to_keep}
+        if not filtered_info:
+            filtered_info = {"data": "No data available"}
+    except Exception:
+        filtered_info = {"data": "No data available"}
+
+    result["stock_info"] = filtered_info
+
+    # Fetch news only if required and not already present
+    if state.get("news_required", False) and not result["news_data"]:
+        result["news_data"] = get_stock_news_info(stock)
+    return result
+
+def route_query(state: GraphState) -> Literal["new", "follow_up", "other"]:
     if state.get("non_stock"):
         return "other"
     elif state.get("follow_up"):
@@ -126,15 +184,26 @@ def answer_user_messages(state: GraphState) -> Optional[Union[dict, GraphState]]
         result = chain.invoke({"message": state["messages"][-1]})
         return {"response": result}
 
-    # Handle single-stock queries (follow_up or new)
-    chain = prompt_answer_messages | llmg
+    result = None
     formatted_info = json.dumps(state.get("stock_info", {}), indent=2)
-    result = chain.invoke({
-        "messages": state["messages"][-1],
-        "stock_info": formatted_info
-    })
+    # Handle single-stock queries (follow_up or new)
+    if state.get("news_required", False):
+        chain = prompt_answer_messages | llmg
+        result = chain.invoke({
+            "messages": state["messages"][-1],
+            "stock_info": formatted_info,
+            "news_required": False,
+            "news_data": state["news_data"]
+        })
+    else:
+        chain = prompt_answer_messages_wo_news | llmg
+        result = chain.invoke({
+            "messages": state["messages"][-1],
+            "stock_info": formatted_info,
+        })    
 
     return {"response": result}
+
 
 # Build the graph
 workflow = StateGraph(GraphState)
@@ -143,19 +212,20 @@ workflow.add_node("extract_symbol", extract_symbol)
 workflow.add_node("get_stock_info", get_stock_info)
 workflow.add_node("answer_user_messages", answer_user_messages)
 workflow.add_node("classify_query", classify_query)
+workflow.add_node("news_required", news_required)
 
 workflow.add_edge(START, "classify_query")
 workflow.add_conditional_edges(
     "classify_query",
     route_query,
     {
-        "follow_up": "answer_user_messages",
         "new": "extract_symbol",
-        "other": "answer_user_messages",
+        "follow_up": "news_required",
+        "other": "answer_user_messages"
     }
 )
-
-workflow.add_edge("extract_symbol", "get_stock_info")
+workflow.add_edge("extract_symbol", "news_required")
+workflow.add_edge("news_required", "get_stock_info")
 workflow.add_edge("get_stock_info", "answer_user_messages")
 workflow.add_edge("answer_user_messages", END)
 
