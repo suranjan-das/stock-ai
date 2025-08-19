@@ -1,67 +1,76 @@
 from langchain_core.prompts import ChatPromptTemplate
 
+prompt_classify_input_query = ChatPromptTemplate.from_template(
+    "You are a query classifier for a stock analysis app.\n"
+    "You will be given a list of user messages. Focus on the **last message** in context of the conversation.\n\n"
+    "Classify the last message into exactly one of these categories:\n"
+    "1. 'new' — The last message is about **exactly one specific stock or company**, either by:\n"
+    "   - Explicit company name (e.g., 'Tata Motors', 'Infosys'),\n"
+    "   - Common abbreviation or short name (e.g., 'SBI' for State Bank of India),\n"
+    "   - A valid stock ticker (e.g., 'HDFCBANK', 'RELIANCE').\n"
+    "   The stock should not have been mentioned in the previous messages.\n\n"
+    "2. 'follow_up' — The last message refers to the **same stock already discussed earlier** without explicitly naming it, "
+    "or uses terms like 'it', 'that stock', 'this company', 'the bank', 'the one we talked about'.\n\n"
+    "3. 'other' — The last message is unrelated to stocks, mentions multiple stocks, or is about general market trends, sectors, or industries.\n\n"
+    "Important:\n"
+    "- Treat **abbreviations, acronyms, and tickers** as valid company mentions.\n"
+    "- Always pick only one label.\n"
+    "- Return only the label text ('new', 'follow_up', or 'other'), nothing else.\n\n"
+    "Conversation messages: {messages}\n"
+    "Last message to classify: {messages}[-1]"
+)
+
 # Prompt to extract company name
 prompt_extract_symbol = ChatPromptTemplate.from_template(
     "Extract only the company or stock name from the user's stock-related messages. "
-    "Respond with the extracted company name as a single string. "
+    "Respond with the extracted company name from the query as a single string. "
     "messages: {messages}"
 )
-# Prompt to answer user messages for answers without news
-prompt_answer_messages_wo_news = ChatPromptTemplate.from_template(
-    "You are a helpful financial expert who can provide answers to user queries.\n\n"
-    "You are provided with structured stock-related data for a company: {stock_info}\n\n"
-    "The user has asked: {messages}\n\n"
-    "Your task:\n"
-    "- If the messages can be answered using ONLY the provided data, give a clear, concise response (max 350 words).\n"
-    "- If the data is insufficient to fully answer the messages, state clearly that the available information is not enough.\n\n"
-    "Do not use any external knowledge or assumptions. Base your answer strictly on the given data."
-)
-# for messages that include news
-prompt_answer_messages = ChatPromptTemplate.from_template(
-    "You are a helpful financial expert who can provide answers to user queries (max 450 words).\n\n"
-    "You are provided with two sources of information:\n"
-    "- Structured stock-related data: {stock_info}\n"
-    "- Recent news summaries (if any): {news_data}\n\n"
-    "The user has asked: {messages}\n\n"
-    "Your task:\n"
-    "- Use the structured data as the primary source for factual, numeric, and financial information.\n"
-    "- If news summaries are provided (non-empty), also consider them to enrich the answer. "
-    "Clearly mention the insights derived from the news (e.g., 'According to recent news...').\n"
-    "- If news_data is empty, ignore it and rely only on stock_info.\n"
-    "- If neither stock_info nor news_data contain enough information to fully answer, state clearly that the available information is not enough.\n\n"
-    "Constraints:\n"
-    "- Keep your answer clear, concise, and under 350 words.\n"
-    "- Do not use any external knowledge or assumptions beyond the provided stock_info and news_data."
-)
 
-prompt_route_all = ChatPromptTemplate.from_template(
-    "You are a classifier for a stock analysis app.\n"
-    "You will be given a list of messages. Consider the last message in the context of previous ones and classify it.\n\n"
-    "Return only one of the following labels:\n"
-    "1. 'new' — The last message is about exactly one specific stock and explicitly names it.\n"
-    "2. 'follow_up' — The last message refers to a stock discussed earlier without naming it, or uses terms like 'it', 'that stock', 'the same', 'reset session'.\n"
-    "3. 'other' — The last message is a greeting, unrelated to stocks, mentions more than one stock, or is about general stock market trends.\n\n"
-    "Do not generate explanations or any additional text. Respond with exactly one label.\n\n"
-    "Messages: {messages}"
-)
+prompt_disambiguate = ChatPromptTemplate.from_template("""
+You are a financial assistant that helps identify the correct Indian company 
+from a user's query.
+
+The user has asked about this stock or company: "{user_query}"
+
+Here are the possible company matches from our database:
+{candidates}
+
+Your task:
+- Pick the single most likely company name from the candidates that matches the user's intent.
+- If none of the candidates are a good match, output "NO_MATCH".
+- Do NOT explain your reasoning, just output the company name (or "NO_MATCH").
+
+Answer strictly with only one of:
+1. A company name from the candidates list, OR
+2. "NO_MATCH"
+""")
 
 prompt_handle_other = ChatPromptTemplate.from_template(
     "You are a polite assistant for a stock analysis app.\n"
-    "You will be given the last user message.\n\n"
+    "You will be given a user message.\n\n"
     "Rules:\n"
     "1. If it is a simple greeting (hello, hi, good morning, how are you, etc.):\n"
     "   - Greet back warmly.\n"
-    "   - Mention that this app can help analyze a single stock for short-term or long-term insights.\n"
     "2. For any other message:\n"
     "   - Politely explain that this app can only help with single stock analysis and cannot answer other types of questions.\n\n"
-    "Message: {message}"
+    "message: {messages}"
 )
-# Prompt to determine news relevance
-prompt_news_relevance = ChatPromptTemplate.from_template(
-    "Decide if stock news is relevant for answering the last query in the list. "
-    "Rules: "
-    "- Relevant → The last query is about investment decisions, future outlook, stability, risks, or long-term prospects (e.g., 'Should I invest?', 'Is it good for long term?', 'Does the company look stable?'). "
-    "- Irrelevant → The last query only asks for numeric/financial metrics (e.g., price, P/E ratio, market cap, book value), which can be answered from structured data without news. "
-    "Respond with one word only: 'relevant' or 'irrelevant'. "
-    "Messages: {messages} "
+prompt_answer_query = ChatPromptTemplate.from_template(
+    "You are a professional financial expert tasked with answering user queries.\n\n"
+    "You are provided with structured stock-related data for a company: {stock_parameters}\n\n"
+    "You are also provided with some recent news excerpts about this company or stock: {news_data}\n\n"
+    "The user has asked: {messages}\n\n"
+    "Your task:\n"
+    "- If the messages can be answered using ONLY the provided data, give a clear, precise response (max 350 words).\n"
+    "- Use the news data only if it adds meaningful insight; otherwise, do not include it.\n"
+    "- If the data is insufficient to fully answer the query, clearly state that the available information is not enough.\n"
+    "- Present all numeric values in a properly formatted way:\n"
+    "   • Use commas for thousands separators (e.g., 12,345 not 12345).\n"
+    "   • Use two decimal places for ratios, percentages, or currency values when appropriate (e.g., 15.25%).\n"
+    "   • Ensure units are explicit (e.g., '₹1,250 crore', '2.50%').\n"
+    "   • Do not round off values unless explicitly needed for clarity.\n\n"
+    "Do not use any external knowledge or assumptions. Base your answer strictly on the given data."
 )
+
+

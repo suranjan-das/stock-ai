@@ -29,7 +29,7 @@ async def run_graph_stream(user_message: str):
     Runs the LangGraph app in streaming mode and yields chunks of text.
     """
     config = {"configurable": {"thread_id": "abc123"}}  # customize as needed
-    node_to_stream = 'answer_user_messages'
+    node_to_stream = 'answer_query'
 
     async for event in app.astream_events(
         {"messages": [HumanMessage(content=user_message)]},
