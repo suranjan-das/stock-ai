@@ -1,4 +1,3 @@
-from IPython.display import Image, display
 import pandas as pd
 import json
 from functools import lru_cache
@@ -7,21 +6,17 @@ import re
 from rapidfuzz import process, fuzz
 import yfinance as yf
 
-from langchain_openai import ChatOpenAI
 from langchain.chat_models import init_chat_model
-from langchain_core.messages import SystemMessage, HumanMessage, AnyMessage
+from langchain_core.messages import HumanMessage
 from langchain_core.messages import RemoveMessage
 from langchain_core.prompts import ChatPromptTemplate
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph import MessagesState
 from langgraph.graph.message import add_messages
-from langgraph.graph.message import REMOVE_ALL_MESSAGES
-from langgraph.prebuilt import ToolNode
-from langgraph.prebuilt import tools_condition
 from langgraph.checkpoint.memory import MemorySaver
 
-from typing import TypedDict, Literal, Optional, List, Dict, Union
+from typing import Literal, Optional, Dict
 from typing_extensions import Annotated
 from operator import add
 

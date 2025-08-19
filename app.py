@@ -11,7 +11,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from graph import app  # assuming your LangGraph object is named `app`
 
 # ---------- Streamlit Config ----------
-st.set_page_config(page_title="📈 Stock Analysis Chatbot", page_icon="📊")
+st.set_page_config(page_title="📈 Stock Analysis Chatbot")
 st.title("📈 Stock Analysis Chatbot")
 
 # ---------- Session State ----------
