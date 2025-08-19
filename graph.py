@@ -70,7 +70,8 @@ def classify_query(state: GraphState) -> dict:
     elif result == "follow_up":
         return {"query_type": "follow_up"}
     else:
-        return {"query_type": "other"}
+        return {"messages": [RemoveMessage(id=m.id) for m in state["messages"][:-1]],
+                "query_type": "other"}
 
 def handle_follow_up_query(state: GraphState):
     # for future use
