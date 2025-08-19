@@ -33,7 +33,7 @@ dotenv_path = ".env"
 load_dotenv(dotenv_path)
 
 # initialize model for large number of input tokens
-llmg = init_chat_model("gemini-2.0-flash", model_provider="google_genai")
+llmg = init_chat_model("gemini-2.0-flash-lite", model_provider="google_genai")
 
 # Load CSV of NSE companies
 df_path = "./data/EQUITY_L.csv"
