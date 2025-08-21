@@ -21,6 +21,9 @@ Thumbs.db
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
 
+# Jupyter Notebook experiments
+notebooks/
+
 # Streamlit cache
 .streamlit/
 
