@@ -1,0 +1,11 @@
+{
+    "dependencies": [
+        "langchain_openai",
+        "langchain-google-genai",
+        "./"
+    ],
+    "graphs": {
+        "my_agent": "./temp_graph.py:app"
+    },
+    "env": "./.env"
+}
