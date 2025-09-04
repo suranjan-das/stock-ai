@@ -13,8 +13,7 @@ from yfutil import get_stock_data, stock_chart
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import your LangGraph app
-from temp_graph import app  # assuming your LangGraph object is named `app`
-from temp_graph import update_data
+from graph import app, update_data  # assuming your LangGraph object is named `app`
 
 # Custom CSS to adjust the top padding of the main content area
 st.markdown("""
