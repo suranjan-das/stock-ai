@@ -1,11 +1,13 @@
 import numpy as np
 import pandas as pd
 import json
+import pytz
 import yfinance as yf
 from typing import Dict
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from functools import lru_cache
+import streamlit as st
 
 # ---------------------- Helpers -----------------------------
 PERIOD_MAP = {
@@ -46,10 +48,10 @@ def get_stock_data(ticker, period="5d"):
         df["BB_lower"] = sma20 - (rolling_std * 2)
 
         # Format index for readability
-        if interval in ["2m", "15m", "30m", "1h", "4h"]:  
+        if interval in ["2m", "15m", "30m"]:  
             # intraday → show full datetime
-            df.index = df.index.strftime("%d %b %H:%M")
-        elif interval in ["1d", "1wk"]:  
+            df.index = df.index.tz_convert("Asia/Kolkata").strftime("%d %b %I:%M %p")
+        elif interval in ["4h", "1d", "1wk"]:  
             # daily/weekly → show date
             df.index = df.index.strftime("%d %b %Y")
         elif interval in ["1mo"]:  
@@ -126,7 +128,7 @@ def stock_chart(df: pd.DataFrame, symbol: str):
             x=df.index, y=df["Close"][symbol],
             mode="lines",
             name="Close Price",
-            line=dict(color="blue", width=1.5),
+            line=dict(color="#1f77b4", width=1.5),  # blue, readable on both themes
             visible='legendonly'
         ),
         row=1, col=1
@@ -135,40 +137,37 @@ def stock_chart(df: pd.DataFrame, symbol: str):
     # --- Moving Averages ---
     fig.add_trace(
         go.Scatter(x=df.index, y=df["SMA20"], mode="lines",
-                   name="SMA20", line=dict(color="purple", width=1,),
-                   visible='legendonly'),
+                   name="SMA20", line=dict(color="#9467bd", width=1)),
         row=1, col=1
     )
     fig.add_trace(
         go.Scatter(x=df.index, y=df["SMA50"], mode="lines",
-                   name="SMA50", line=dict(color="orange", width=1),
-                   visible='legendonly'),
+                   name="SMA50", line=dict(color="#ff7f0e", width=1)),
         row=1, col=1
     )
+
     # --- Bollinger Bands ---
     fig.add_trace(
         go.Scatter(x=df.index, y=df["BB_upper"], mode="lines",
-                   name="BB Upper", line=dict(color="red", width=1),
-                   line_dash="dot",
-                   visible='legendonly'),
+                   name="BB Upper", line=dict(color="#d62728", width=1),
+                   line_dash="dot"),
         row=1, col=1
     )
     fig.add_trace(
         go.Scatter(x=df.index, y=df["BB_lower"], mode="lines",
-                   name="BB Lower", line=dict(color="green", width=1),
-                   line_dash="dot",
-                   visible='legendonly'),
+                   name="BB Lower", line=dict(color="#2ca02c", width=1),
+                   line_dash="dot"),
         row=1, col=1
     )
 
     # --- RSI ---
     fig.add_trace(
         go.Scatter(x=df.index, y=df["RSI"], mode="lines",
-                   name="RSI", line=dict(color="teal", width=1)),
+                   name="RSI", line=dict(color="#17becf", width=1)),  # cyan-like
         row=2, col=1
     )
-    fig.add_hline(y=70, line_dash="dot", line_color="red", row=2, col=1)
-    fig.add_hline(y=30, line_dash="dot", line_color="green", row=2, col=1)
+    fig.add_hline(y=70, line_dash="dot", line_color="#e377c2", row=2, col=1)  # pink-magenta
+    fig.add_hline(y=30, line_dash="dot", line_color="#bcbd22", row=2, col=1)  # olive
 
     # --- X-axis formatting ---
     fig.update_xaxes(type="category")  # no gaps
@@ -198,6 +197,7 @@ def stock_chart(df: pd.DataFrame, symbol: str):
         xaxis2=dict(showspikes=True, spikemode="across", spikesnap="cursor", 
         showline=True, spikethickness=1),
     )
+    fig.update_xaxes(showline=False, showgrid=False)
     fig.update_yaxes(
         tickprefix="₹",
         tickformat="~s",  # compact form: 1k, 1M, 1B
@@ -205,6 +205,7 @@ def stock_chart(df: pd.DataFrame, symbol: str):
     )
 
     return fig
+
 
 # ---------------------- 15 Key Indices ----------------------
 IMPORTANT_FINANCIALS_15 = [

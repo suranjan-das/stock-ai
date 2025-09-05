@@ -99,8 +99,6 @@ options = {f"{row['NAME OF COMPANY']}": row['SYMBOL'] for _, row in equity_df.it
 
 # Sidebar
 with st.sidebar:
-    st.header("⚙️ Controls")
-
     selected_display = st.selectbox(
         "Select a company",
         options=list(options.keys()),
@@ -122,28 +120,29 @@ with st.sidebar:
         )
 
         # Pre-format metrics safely
-        day_range = f"₹{metrics['day_low']:,} – ₹{metrics['day_high']:,}" if metrics["day_low"] and metrics["day_high"] else "N/A"
+        day_range = f"₹{metrics['day_low']:,.2f} – ₹{metrics['day_high']:,.2f}" if metrics["day_low"] and metrics["day_high"] else "N/A"
         pe_ratio = f"{metrics['pe_ratio']:.2f}" if metrics["pe_ratio"] else "N/A"
         dividend_yield = f"{metrics['dividend_yield']:.2f}%" if metrics["dividend_yield"] else "N/A"
 
-        # Render nicely styled block
-        st.markdown(
-            f"""
-            <div style="
-                background-color:#f9f9f9;
-                padding:10px 15px;
-                border-radius:10px;
-                font-size:14px;
-                line-height:1.6;
-            ">
-                DAY RANGE: <b>{day_range}</b><br><br>
-                P/E RATIO: <b>{pe_ratio}</b><br><br>
-                DIVIDEND YIELD: <b>{dividend_yield}</b>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        with st.container():
+            col1, col2 = st.columns([1, 2])  # [label, value]
 
+            with col1:
+                st.markdown("**DAY RANGE**")
+            with col2:
+                st.write(day_range)
+
+            col1, col2 = st.columns([1, 2])
+            with col1:
+                st.markdown("**P/E RATIO**")
+            with col2:
+                st.write(pe_ratio)
+
+            col1, col2 = st.columns([1, 2])
+            with col1:
+                st.markdown("**DIVIDEND YIELD**")
+            with col2:
+                st.write(dividend_yield)
 
 
     st.divider()
