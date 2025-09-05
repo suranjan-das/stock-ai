@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 from langchain.schema import HumanMessage
 
-from yfutil import get_stock_data, stock_chart
+from yfutil import get_stock_data, stock_chart, get_key_metrics
 
 # ---------- Add project root to sys.path so we can import graph.py ----------
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -101,20 +101,55 @@ options = {f"{row['NAME OF COMPANY']}": row['SYMBOL'] for _, row in equity_df.it
 with st.sidebar:
     st.header("⚙️ Controls")
 
-    # searchable by both company and ticker
     selected_display = st.selectbox(
         "Select a company",
         options=list(options.keys()),
         index=list(options.values()).index("MARUTI") if "MARUTI" in options.values() else 0
     )
-
-    # Actual ticker you will use downstream
     ticker = f"{options[selected_display]}.NS"
     st.session_state.ticker = ticker
+
+    # ---- Key Metrics ----
+    metrics = get_key_metrics(ticker)
+
+    if metrics and metrics["current"]:
+        # Current price with delta using st.metric
+        st.metric(
+            label="",
+            value=f"₹{metrics['current']:,.2f}",
+            delta=f"{metrics['pct_change']:.2f}%" if metrics["pct_change"] is not None else None,
+            delta_color="normal"
+        )
+
+        # Pre-format metrics safely
+        day_range = f"₹{metrics['day_low']:,} – ₹{metrics['day_high']:,}" if metrics["day_low"] and metrics["day_high"] else "N/A"
+        pe_ratio = f"{metrics['pe_ratio']:.2f}" if metrics["pe_ratio"] else "N/A"
+        dividend_yield = f"{metrics['dividend_yield']:.2f}%" if metrics["dividend_yield"] else "N/A"
+
+        # Render nicely styled block
+        st.markdown(
+            f"""
+            <div style="
+                background-color:#f9f9f9;
+                padding:10px 15px;
+                border-radius:10px;
+                font-size:14px;
+                line-height:1.6;
+            ">
+                DAY RANGE: <b>{day_range}</b><br><br>
+                P/E RATIO: <b>{pe_ratio}</b><br><br>
+                DIVIDEND YIELD: <b>{dividend_yield}</b>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+
 
     st.divider()
     if st.button("🔄 Reset Conversation"):
         st.session_state.messages = []
+
 
 # ---------- Reset when ticker changes ----------
 if st.session_state.last_ticker != ticker:

@@ -105,7 +105,7 @@ def stock_chart(df: pd.DataFrame, symbol: str):
     fig = make_subplots(
         rows=2, cols=1, shared_xaxes=True,
         row_heights=[0.7, 0.3], vertical_spacing=0.05,
-        subplot_titles=[f"{symbol[:-3]} Price", "RSI (14)"]
+        subplot_titles=[f"{symbol[:-3]} NSE", "RSI (14)"]
     )
 
     # --- Price chart (candlestick or line) ---
@@ -206,7 +206,6 @@ def stock_chart(df: pd.DataFrame, symbol: str):
 
     return fig
 
-# ---------------------- 20 Key Indices ----------------------
 # ---------------------- 15 Key Indices ----------------------
 IMPORTANT_FINANCIALS_15 = [
     "Total Revenue", "Operating Revenue", "Gross Profit", "Operating Income",
@@ -291,3 +290,33 @@ def extract_all_statements(ticker: str):
         "BalanceSheet": extract_statement(stock, "balance_sheet", IMPORTANT_BALANCE_SHEET_15),
         "Cashflow": extract_statement(stock, "cashflow", IMPORTANT_CASHFLOW_15),
     }
+
+# ----------------- Helper to fetch key metrics -----------------
+@lru_cache(maxsize=None)
+def get_key_metrics(ticker: str) -> Dict:
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+
+        current = info.get("currentPrice", None)
+        prev_close = info.get("previousClose", None)
+        day_low = info.get("dayLow", None)
+        day_high = info.get("dayHigh", None)
+        pe_ratio = info.get("trailingPE", None)
+        dividend_yield = info.get("dividendYield", None)
+
+        pct_change = None
+        if current is not None and prev_close is not None and prev_close != 0:
+            pct_change = ((current - prev_close) / prev_close) * 100
+
+        return {
+            "current": current,
+            "pct_change": pct_change,
+            "day_low": day_low,
+            "day_high": day_high,
+            "pe_ratio": pe_ratio,
+            "dividend_yield": dividend_yield,
+        }
+    except Exception as e:
+        st.error(f"Error fetching metrics: {e}")
+        return {}
