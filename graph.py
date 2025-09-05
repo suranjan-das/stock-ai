@@ -25,13 +25,14 @@ from typing_extensions import Annotated
 from operator import add
 
 import streamlit as st
-from yfutil import load_info, load_news
+from yfutil import load_info, load_news, extract_all_statements
 from chat_template import prompt_screen_input, prompt_web_search, prompt_answer_query, instruction_template
 
 STOCK_SYMBOL = ""
 STOCK_NAME = ""
 STOCK_INFO = {}
 STOCK_NEWS = ""
+STOCK_STATEMENTS = None
 
 # Always resolve relative to this file's directory
 dotenv_path = ".env"
@@ -41,7 +42,7 @@ load_dotenv(dotenv_path)
 llm = llm = ChatOpenAI(
   api_key=getenv("OPENROUTER_API_KEY"),
   base_url=getenv("OPENROUTER_BASE_URL"),
-  model="gpt-4o",
+  model="gpt-4.1-mini",
 )
 
 # initialize tavily search
@@ -57,11 +58,12 @@ equity_df = pd.read_csv("data/EQUITY_L.csv")  # Columns: SYMBOL, NAME OF COMPANY
 
 def update_data():
     # Update the global stock variables
-    global STOCK_SYMBOL, STOCK_NAME, STOCK_INFO, STOCK_NEWS
+    global STOCK_SYMBOL, STOCK_NAME, STOCK_INFO, STOCK_NEWS, STOCK_STATEMENTS
     STOCK_SYMBOL = st.session_state.ticker
     STOCK_NAME = equity_df[equity_df['SYMBOL'] == STOCK_SYMBOL[:-3]]['NAME OF COMPANY'].values[0]
     STOCK_INFO = load_info(STOCK_SYMBOL)
     STOCK_NEWS = load_news(STOCK_SYMBOL)
+    STOCK_STATEMENTS = extract_all_statements(STOCK_SYMBOL)
 
 # Custom reducer function for merging dictionaries
 def merge_dicts(current: Dict, update: Dict) -> Dict:
@@ -95,8 +97,12 @@ def update_state(state: GraphState) -> GraphState:
         state["name"] = STOCK_NAME
         state["data"]["stock_info"] = STOCK_INFO
         state["data"]["stock_news"] = STOCK_NEWS
+        state["data"]["stock_statements"] = STOCK_STATEMENTS
         state["messages"] = [RemoveMessage(id=m.id) for m in state["messages"][:-1]]
         return state
+    # keep only last 4 messages
+    if len(state["messages"]) > 4:
+        state["messages"] = [RemoveMessage(id=m.id) for m in state["messages"][:-4]]
     return state
 
 class SearchDecision(BaseModel):
@@ -151,9 +157,10 @@ def answer_query(state: GraphState) -> GraphState:
             "stock_name": state["name"] if state.get("name", None) else "Unknown",
             "messages": state["messages"][-1],
             "context": state["messages"][:-1],
-            "stock_parameters": state["data"]["stock_info"] if state.get("data", {}).get("stock_info", None) else "No information available",
+            "stock_parameters": json.dumps(state["data"]["stock_info"], indent=2) if state.get("data", {}).get("stock_info", None) else "No information available",
             "news_data": state["data"]["stock_news"] if state.get("data", {}).get("stock_news", None) else "No information available",
             "web_results": state["data"]["web_info"]  if state.get("data", {}).get("web_info", None) else "No information available",
+            "financial_statements": json.dumps(state["data"]["stock_statements"], indent=2) if state.get("data", {}).get("stock_statements", None) else "No information available",
         })
     return {"messages": result}
 

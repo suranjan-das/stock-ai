@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import json
 import yfinance as yf
 from typing import Dict
 import plotly.graph_objects as go
@@ -204,3 +205,89 @@ def stock_chart(df: pd.DataFrame, symbol: str):
     )
 
     return fig
+
+# ---------------------- 20 Key Indices ----------------------
+# ---------------------- 15 Key Indices ----------------------
+IMPORTANT_FINANCIALS_15 = [
+    "Total Revenue", "Operating Revenue", "Gross Profit", "Operating Income",
+    "Operating Expense", "EBITDA", "EBIT", "Interest Expense",
+    "Pretax Income", "Tax Provision", "Net Income", "Diluted EPS",
+    "Basic EPS", "Normalized Income", "Total Expenses"
+]
+
+IMPORTANT_BALANCE_SHEET_15 = [
+    "Total Assets", "Current Assets", "Cash And Cash Equivalents",
+    "Accounts Receivable", "Inventory", "Net PPE", "Goodwill And Other Intangible Assets",
+    "Total Liabilities Net Minority Interest", "Current Liabilities", "Accounts Payable",
+    "Long Term Debt", "Total Non Current Liabilities Net Minority Interest",
+    "Stockholders Equity", "Retained Earnings", "Common Stock Equity"
+]
+
+IMPORTANT_CASHFLOW_15 = [
+    "Operating Cash Flow", "Free Cash Flow", "Capital Expenditure",
+    "Depreciation And Amortization", "Change In Working Capital", "Change In Inventory",
+    "Change In Receivables", "Change In Payable", "Deferred Tax",
+    "Repayment Of Debt", "Issuance Of Debt", "Cash Dividends Paid",
+    "Issuance Of Capital Stock", "Investing Cash Flow", "Financing Cash Flow"
+]
+
+# ---------------------- Helper ----------------------
+
+def inr_format(value: float) -> str:
+    """Convert number into Indian short scale with INR suffix."""
+    if value is None:
+        return None
+    try:
+        n = float(value)
+    except:
+        return None
+
+    if abs(n) >= 1e7:   # Crores
+        return f"{round(n/1e7,2)} Cr INR"
+    elif abs(n) >= 1e5: # Lakhs
+        return f"{round(n/1e5,2)} Lakh INR"
+    elif abs(n) >= 1e3: # Thousands
+        return f"{round(n/1e3,2)} K INR"
+    else:
+        return f"{round(n,2)} INR"
+
+
+def extract_statement(stock, statement_type: str, important_cols: list):
+    """Extract and format a financial statement into compact per-item dict with last 3 years."""
+    if statement_type == "financials":
+        df = stock.financials.T
+    elif statement_type == "balance_sheet":
+        df = stock.balance_sheet.T
+    elif statement_type == "cashflow":
+        df = stock.cashflow.T
+    else:
+        raise ValueError("statement_type must be one of ['financials','balance_sheet','cashflow']")
+
+    available_cols = [col for col in important_cols if col in df.columns]
+    filtered = df[available_cols].reset_index().rename(columns={"index": "Year"})
+    filtered["Year"] = pd.to_datetime(filtered["Year"]).dt.year.astype(str)
+
+    # Keep only last 3 years
+    filtered = filtered.sort_values("Year", ascending=False).head(3).sort_values("Year")
+
+    # Build compact dict: { "Item": {"Year1": val1, "Year2": val2, "Year3": val3} }
+    compact = {}
+    for col in available_cols:
+        year_map = {}
+        for _, row in filtered.iterrows():
+            val = None if pd.isna(row[col]) else inr_format(row[col])
+            year_map[row["Year"]] = val
+        compact[col] = year_map
+
+    return compact
+
+# ---------------------- Wrapper ----------------------
+@lru_cache(maxsize=None)
+def extract_all_statements(ticker: str):
+    stock = yf.Ticker(ticker)
+
+    return {
+        "Financials": extract_statement(stock, "financials", IMPORTANT_FINANCIALS_15),
+        "BalanceSheet": extract_statement(stock, "balance_sheet", IMPORTANT_BALANCE_SHEET_15),
+        "Cashflow": extract_statement(stock, "cashflow", IMPORTANT_CASHFLOW_15),
+    }
