@@ -48,7 +48,7 @@ def render_chart_tabs(ticker, key_suffix=""):
                 key=f"{ticker}_{period}_{key_suffix}"
             )
 
-            # # Right-aligned red button
+            # Right-aligned red button
             # col1, col2 = st.columns([5, 1])
             # with col2:
             #     if st.button("Analyse Chart", key=f"btn_{ticker}_{period}_{key_suffix}", type="primary"):
@@ -196,6 +196,7 @@ if user_input := st.chat_input("Ask me about a stock..."):
 
     st.session_state.messages.append({"role": "assistant", "content": full_response})
 
+# ---------- Chart Analysis Request ----------
 # if "analyse_request" in st.session_state:
 #     req = st.session_state.pop("analyse_request")
 #     ticker = req["ticker"]
