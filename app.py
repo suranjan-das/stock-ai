@@ -8,6 +8,8 @@ import streamlit as st
 from langchain.schema import HumanMessage
 
 from yfutil import get_stock_data, stock_chart, get_key_metrics
+from chart_analysis import analyze_chart
+
 
 # ---------- Add project root to sys.path so we can import graph.py ----------
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -35,60 +37,45 @@ DEFAULT_TICKERS = [
 def render_chart_tabs(ticker, key_suffix=""):
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["1D", "1WK", "1M", "6M", "1Y", "5Y", "MAX"])
 
-    with tab1:
-        df = get_stock_data(ticker, period="1d")
+    # helper to render inside each tab
+    def render_tab(period):
+        df = get_stock_data(ticker, period=period)
         if df is not None:
-            st.plotly_chart(stock_chart(df, ticker), use_container_width=True, key=f"{ticker}_1d_{key_suffix}")
+            fig = stock_chart(df, ticker)
+            st.plotly_chart(
+                fig,
+                use_container_width=True,
+                key=f"{ticker}_{period}_{key_suffix}"
+            )
+
+            # Right-aligned red button
+            col1, col2 = st.columns([5, 1])
+            with col2:
+                if st.button("Analyse Chart", key=f"btn_{ticker}_{period}_{key_suffix}", type="primary"):
+                    st.session_state["analyse_request"] = {
+                        "ticker": ticker,
+                        "period": period,   # <-- add timeframe
+                        "fig": fig
+                    }
         else:
             st.warning("No data found.")
 
-    with tab2:
-        df = get_stock_data(ticker, period="1wk")
-        if df is not None:
-            st.plotly_chart(stock_chart(df, ticker), use_container_width=True, key=f"{ticker}_1wk_{key_suffix}")
-        else:
-            st.warning("No data found.")
+    with tab1: render_tab("1d")
+    with tab2: render_tab("1wk")
+    with tab3: render_tab("1mo")
+    with tab4: render_tab("6mo")
+    with tab5: render_tab("1y")
+    with tab6: render_tab("5y")
+    with tab7: render_tab("max")
 
-    with tab3:
-        df = get_stock_data(ticker, period="1mo")
-        if df is not None:
-            st.plotly_chart(stock_chart(df, ticker), use_container_width=True, key=f"{ticker}_1m_{key_suffix}")
-        else:
-            st.warning("No data found.")
 
-    with tab4:
-        df = get_stock_data(ticker, period="6mo")
-        if df is not None:
-            st.plotly_chart(stock_chart(df, ticker), use_container_width=True, key=f"{ticker}_6mo_{key_suffix}")
-        else:
-            st.warning("No data found.")
-
-    with tab5:
-        df = get_stock_data(ticker, period="1y")
-        if df is not None:
-            st.plotly_chart(stock_chart(df, ticker), use_container_width=True, key=f"{ticker}_1y_{key_suffix}")
-        else:
-            st.warning("No data found.")
-
-    with tab6:
-        df = get_stock_data(ticker, period="5y")
-        if df is not None:
-            st.plotly_chart(stock_chart(df, ticker), use_container_width=True, key=f"{ticker}_5y_{key_suffix}")
-        else:
-            st.warning("No data found.")
-
-    with tab7:
-        df = get_stock_data(ticker, period="max")
-        if df is not None:
-            st.plotly_chart(stock_chart(df, ticker), use_container_width=True, key=f"{ticker}_max_{key_suffix}")
-        else:
-            st.warning("No data found.")
 
 
 # ---------- Session State ----------
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "last_ticker" not in st.session_state:
+    # Update global state in temp_graph
     st.session_state.last_ticker = None
 
 # Load your CSV
@@ -208,3 +195,33 @@ if user_input := st.chat_input("Ask me about a stock..."):
         full_response = asyncio.run(process_stream())
 
     st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+if "analyse_request" in st.session_state:
+    req = st.session_state.pop("analyse_request")
+    ticker = req["ticker"]
+    fig = req["fig"]
+
+    with st.chat_message("assistant"):
+        placeholder = st.empty()
+
+        def chart_stream_generator():
+            # This mimics async streaming token by token
+            full_text = ""
+            for token in analyze_chart(fig, ticker, timeframe=req["period"], stream_handler=None):  # returns iterable of tokens
+                full_text += token
+                yield full_text
+            # yield full_text at the end in case nothing streamed
+            if not full_text:
+                yield full_text
+
+        # Stream the output like your chat input
+        full_response = ""
+        for chunk in chart_stream_generator():
+            full_response = chunk
+            placeholder.markdown(full_response)
+
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+
+
+
