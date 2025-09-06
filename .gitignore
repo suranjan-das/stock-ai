@@ -24,7 +24,9 @@ Thumbs.db
 # Jupyter Notebook experiments
 notebooks/
 
-.langgraph.json
+# LangGraph files
+langgraph.json
+.langgraph_api/
 
 # Streamlit cache
 .streamlit/

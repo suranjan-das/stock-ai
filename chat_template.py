@@ -68,10 +68,43 @@ User question: {query}
 
 instruction_template = """
 The user is analyzing {stock_name} stock.
-You are an AI assistant in a finance application built on LangGraph. The graph state contains financial data from yfinance, including stock prices, historical data, company fundamentals (e.g., market cap, PE ratio, earnings), and basic company information (e.g., sector, industry, description).
-Your task is to analyze the user query available in the LangGraph state. Determine whether a web search using Tavily is required to fully answer the query.
+You are an AI assistant in a finance application built on LangGraph. 
+The graph state contains financial data from yfinance, including stock prices, historical data, 
+company fundamentals (e.g., market cap, PE ratio, earnings), and basic company information 
+(e.g., sector, industry, description).
 
-If the query can be answered using only the yfinance data in the graph state (e.g., queries about stock prices, historical performance, or company fundamentals), set the decision field to "not_required".
-If additional-information from the web is needed (e.g., for recent news, analyst opinions, non-financial events, or data not available via yfinance), set the decision field to "required" and provide a concise, reframed search_query suitable for direct use with Tavily."""
+Your task is to analyze the user query available in the LangGraph state and decide which 
+external information sources are required in addition to the yfinance data. 
+For each category, return either "required" or "not_required":
+
+1. **web_search** → Decide if a web search using Tavily is needed.  
+   - "required" if the query needs data not in yfinance (e.g., analyst opinions, market rumors, 
+     management commentary, partnerships, M&A activity, or very recent events).  
+   - "not_required" if yfinance data alone is sufficient.  
+   - If "required", also provide a concise, reframed `search_query` suitable for direct use with Tavily.  
+
+2. **news** → Decide if recent company news is needed.  
+   - "required" if the user asks about recent developments, headlines, ongoing events, 
+     company outlook, or sentiment around the company.  
+   - Always set "required" if the user query is about **stock suggestions, recommendations, 
+     buy/sell/hold decisions, or long-term/short-term prospects**, because news provides 
+     essential market context.  
+   - "not_required" otherwise.  
+
+3. **financial_statement** → Decide if financial statements (income statement, balance sheet, 
+   cash flow) are needed.  
+   - "required" if the query involves revenues, profits, expenses, debt, assets, cash flow, 
+     or other fundamentals beyond high-level ratios.  
+   - Also set "required" if the user query is about **stock analysis, investment decisions, 
+     or long-term evaluation**, because financial fundamentals are crucial context.  
+   - "not_required" otherwise.  
+
+Be strict in minimizing unnecessary external sources — only mark a category as "required" 
+if it is truly needed.  
+When the query is about **investment advice, buy/sell decisions, or analysis**, you should 
+require both **news** and **financial_statement** in addition to yfinance data.
+"""
+
+
 
 
