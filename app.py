@@ -48,15 +48,15 @@ def render_chart_tabs(ticker, key_suffix=""):
                 key=f"{ticker}_{period}_{key_suffix}"
             )
 
-            # Right-aligned red button
-            col1, col2 = st.columns([5, 1])
-            with col2:
-                if st.button("Analyse Chart", key=f"btn_{ticker}_{period}_{key_suffix}", type="primary"):
-                    st.session_state["analyse_request"] = {
-                        "ticker": ticker,
-                        "period": period,   # <-- add timeframe
-                        "fig": fig
-                    }
+            # # Right-aligned red button
+            # col1, col2 = st.columns([5, 1])
+            # with col2:
+            #     if st.button("Analyse Chart", key=f"btn_{ticker}_{period}_{key_suffix}", type="primary"):
+            #         st.session_state["analyse_request"] = {
+            #             "ticker": ticker,
+            #             "period": period,   # <-- add timeframe
+            #             "fig": fig
+            #         }
         else:
             st.warning("No data found.")
 
@@ -196,31 +196,31 @@ if user_input := st.chat_input("Ask me about a stock..."):
 
     st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-if "analyse_request" in st.session_state:
-    req = st.session_state.pop("analyse_request")
-    ticker = req["ticker"]
-    fig = req["fig"]
+# if "analyse_request" in st.session_state:
+#     req = st.session_state.pop("analyse_request")
+#     ticker = req["ticker"]
+#     fig = req["fig"]
 
-    with st.chat_message("assistant"):
-        placeholder = st.empty()
+#     with st.chat_message("assistant"):
+#         placeholder = st.empty()
 
-        def chart_stream_generator():
-            # This mimics async streaming token by token
-            full_text = ""
-            for token in analyze_chart(fig, ticker, timeframe=req["period"], stream_handler=None):  # returns iterable of tokens
-                full_text += token
-                yield full_text
-            # yield full_text at the end in case nothing streamed
-            if not full_text:
-                yield full_text
+#         def chart_stream_generator():
+#             # This mimics async streaming token by token
+#             full_text = ""
+#             for token in analyze_chart(fig, ticker, timeframe=req["period"], stream_handler=None):  # returns iterable of tokens
+#                 full_text += token
+#                 yield full_text
+#             # yield full_text at the end in case nothing streamed
+#             if not full_text:
+#                 yield full_text
 
-        # Stream the output like your chat input
-        full_response = ""
-        for chunk in chart_stream_generator():
-            full_response = chunk
-            placeholder.markdown(full_response)
+#         # Stream the output like your chat input
+#         full_response = ""
+#         for chunk in chart_stream_generator():
+#             full_response = chunk
+#             placeholder.markdown(full_response)
 
-    st.session_state.messages.append({"role": "assistant", "content": full_response})
+#     st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 
 
