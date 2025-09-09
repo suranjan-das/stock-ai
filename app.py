@@ -1,4 +1,5 @@
 import os
+import random
 import sys
 import asyncio
 from typing import Dict
@@ -15,7 +16,7 @@ from chart_analysis import analyze_chart
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import your LangGraph app
-from graph import app, update_data  # assuming your LangGraph object is named `app`
+from graph import app
 
 # Custom CSS to adjust the top padding of the main content area
 st.markdown("""
@@ -29,8 +30,8 @@ st.markdown("""
 st.set_page_config(page_title="Stock Analyst", layout="wide")
 
 DEFAULT_TICKERS = [
-    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "SBIN.NS", "TATAMOTORS.NS",
-    "INFY.NS", "ICICIBANK.NS", "ITC.NS", "LT.NS", "MARUTI.NS",
+    "RELIANCE", "TCS", "HDFCBANK", "SBIN", "TATAMOTORS",
+    "INFY", "ICICIBANK", "ITC", "LT", "MARUTI",
 ]
 
 # ----------------- Render chart with tabs -----------------
@@ -83,13 +84,20 @@ equity_df = pd.read_csv("data/EQUITY_L.csv")  # Columns: SYMBOL, NAME OF COMPANY
 
 # Build a mapping { "NAME OF COMPANY (SYMBOL)": "SYMBOL" }
 options = {f"{row['NAME OF COMPANY']}": row['SYMBOL'] for _, row in equity_df.iterrows()}
+reverse_options = {v: k for k, v in options.items()}
+
+# Initialize random default only once per session
+if "default_symbol" not in st.session_state:
+    st.session_state.default_symbol = random.choice(DEFAULT_TICKERS)
+
+default_index = list(options.values()).index(st.session_state.default_symbol)
 
 # Sidebar
 with st.sidebar:
     selected_display = st.selectbox(
         "Select a company",
         options=list(options.keys()),
-        index=list(options.values()).index("MARUTI") if "MARUTI" in options.values() else 0
+        index=default_index
     )
     ticker = f"{options[selected_display]}.NS"
     st.session_state.ticker = ticker
@@ -100,7 +108,8 @@ with st.sidebar:
     if metrics and metrics["current"]:
         # Current price with delta using st.metric
         st.metric(
-            label="",
+            label="CURRENT PRICE",
+            label_visibility="collapsed",
             value=f"₹{metrics['current']:,.2f}",
             delta=f"{metrics['pct_change']:.2f}%" if metrics["pct_change"] is not None else None,
             delta_color="normal"
@@ -142,7 +151,7 @@ if st.session_state.last_ticker != ticker:
     st.session_state.messages = []
     st.session_state.last_ticker = ticker
     # Update global state in temp_graph
-    update_data()
+    # update_data()
 
 
 # ---------- Inject chart as first assistant message ----------
@@ -160,12 +169,14 @@ for i, msg in enumerate(st.session_state.messages):
 
 
 # ---------- Streaming Logic ----------
-async def run_graph_stream(user_message: str):
+async def run_graph_stream(user_message: str, ticker: str = ticker):
     config = {"configurable": {"thread_id": "abc123"}}
     node_to_stream = "answer_query"
 
     async for event in app.astream_events(
-        {"messages": [HumanMessage(content=user_message)]},
+        {"messages": [HumanMessage(content=user_message)],
+         "name": reverse_options.get(ticker[:-3], "Unknown"),
+         "symbol": ticker},
         config,
         version="v2"
     ):
@@ -187,7 +198,7 @@ if user_input := st.chat_input("Ask me about a stock..."):
 
         async def process_stream():
             full = ""
-            async for chunk in run_graph_stream(user_input):
+            async for chunk in run_graph_stream(user_input, ticker):
                 full += chunk
                 placeholder.markdown(full)
             return full

@@ -20,8 +20,9 @@ PERIOD_MAP = {
     "max": ("max", "1mo"),
 }
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=128)
 def get_stock_data(ticker, period="5d"):
+    print(f"Downloading stock data for {ticker} period={period}")
     # Map period to (period, interval)
     yf_period, interval = PERIOD_MAP.get(period, ("6mo", "1h"))
 
@@ -68,7 +69,7 @@ def get_stock_data(ticker, period="5d"):
         return None
 
 # Cache important keys CSV so it’s loaded only once
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=128)
 def load_keys_to_keep(csv_path="./important_keys.csv"):
     try:
         keys_df = pd.read_csv(csv_path, header=None)
@@ -76,8 +77,9 @@ def load_keys_to_keep(csv_path="./important_keys.csv"):
     except Exception:
         return set()
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=128)
 def load_info(ticker: str) -> Dict:
+    print(f"Loading info for {ticker}")
     t = yf.Ticker(ticker)
     info = {}
     try:
@@ -88,8 +90,9 @@ def load_info(ticker: str) -> Dict:
         info = {}
     return info
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=128)
 def load_news(ticker: str) -> str:
+    print(f"Loading news for {ticker}")
     news_string = ""
     stock = yf.Ticker(ticker)
     try:        
@@ -251,9 +254,9 @@ def inr_format(value: float) -> str:
     else:
         return f"{round(n,2)} INR"
 
-
 def extract_statement(stock, statement_type: str, important_cols: list):
     """Extract and format a financial statement into compact per-item dict with last 3 years."""
+    print(f"Extracting {statement_type} for {stock.ticker}")
     if statement_type == "financials":
         df = stock.financials.T
     elif statement_type == "balance_sheet":
@@ -282,7 +285,7 @@ def extract_statement(stock, statement_type: str, important_cols: list):
     return compact
 
 # ---------------------- Wrapper ----------------------
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=128)
 def extract_all_statements(ticker: str):
     stock = yf.Ticker(ticker)
 
@@ -293,17 +296,16 @@ def extract_all_statements(ticker: str):
     }
 
 # ----------------- Helper to fetch key metrics -----------------
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=128)
 def get_key_metrics(ticker: str) -> Dict:
     try:
-        stock = yf.Ticker(ticker)
-        info = stock.info
+        info = load_info(ticker)
 
         current = info.get("currentPrice", None)
         prev_close = info.get("previousClose", None)
         day_low = info.get("dayLow", None)
         day_high = info.get("dayHigh", None)
-        pe_ratio = info.get("trailingPE", None)
+        pe_ratio = info.get("forwardPE", None)
         dividend_yield = info.get("dividendYield", None)
 
         pct_change = None

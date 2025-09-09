@@ -29,17 +29,7 @@ from chat_template import (
     prompt_answer_query,
     instruction_template,
 )
-
-
-# --------------------------
-# Global State
-# --------------------------
-STOCK_SYMBOL = ""
-STOCK_NAME = ""
-STOCK_INFO = {}
-STOCK_NEWS = ""
-STOCK_STATEMENTS = None
-
+from pydantic import BaseModel, Field
 
 # --------------------------
 # Environment & Config
@@ -62,21 +52,6 @@ tavily_search = TavilySearch(
 
 # Equity list (CSV)
 equity_df = pd.read_csv("data/EQUITY_L.csv")  # Columns: SYMBOL, NAME OF COMPANY
-
-
-# --------------------------
-# Utilities
-# --------------------------
-def update_data():
-    """Update global stock variables from session state ticker."""
-    global STOCK_SYMBOL, STOCK_NAME, STOCK_INFO, STOCK_NEWS, STOCK_STATEMENTS
-
-    STOCK_SYMBOL = st.session_state.ticker
-    STOCK_NAME = equity_df[equity_df['SYMBOL'] == STOCK_SYMBOL[:-3]]['NAME OF COMPANY'].values[0]
-
-    STOCK_INFO = load_info(STOCK_SYMBOL)
-    STOCK_NEWS = load_news(STOCK_SYMBOL)
-    STOCK_STATEMENTS = extract_all_statements(STOCK_SYMBOL)
 
 
 def merge_dicts(current: Dict, update: Dict) -> Dict:
@@ -117,7 +92,7 @@ def screen_input(state: GraphState) -> Literal["update_state", "answer_query"]:
     chain = prompt_screen_input | llm
     result = chain.invoke({
         "query": state["messages"][-1],
-        "stock_name": STOCK_NAME,
+        "stock_name": state.get("name", "Unknown"),
     }).content.strip()
 
     return "update_state" if result == "finance" else "answer_query"
@@ -125,16 +100,10 @@ def screen_input(state: GraphState) -> Literal["update_state", "answer_query"]:
 
 def update_state(state: GraphState) -> GraphState:
     """Update stock info in the state if symbol changed."""
-    if state.get("symbol") is None or state["symbol"] != STOCK_SYMBOL:
-        state["symbol"] = STOCK_SYMBOL
-        state["name"] = STOCK_NAME
-        state["data"]["stock_info"] = STOCK_INFO
-        state["data"]["stock_news"] = STOCK_NEWS
-        state["data"]["stock_statements"] = STOCK_STATEMENTS
-
-        # Keep only latest user message
-        state["messages"] = [RemoveMessage(id=m.id) for m in state["messages"][:-1]]
-        return state
+    
+    state["data"]["stock_info"] = load_info(state["symbol"])
+    state["data"]["stock_news"] = load_news(state["symbol"])
+    state["data"]["stock_statements"] = extract_all_statements(state["symbol"])
 
     # Keep last 4 messages for context
     if len(state["messages"]) > 4:
@@ -145,8 +114,6 @@ def update_state(state: GraphState) -> GraphState:
 # --------------------------
 # Search Decision
 # --------------------------
-from pydantic import BaseModel, Field
-
 class InfoDecision(BaseModel):
     """Decision on whether external info is required for answering the query."""
     
